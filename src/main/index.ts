@@ -56,7 +56,7 @@ function send(channel: string, payload?: unknown) {
   if (!win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
-async function ask(text: string, withScreenshot: boolean, profileId?: string) {
+async function ask(text: string, withScreenshot: boolean, profileId?: string, display?: string) {
   inflight?.abort()
   const ctrl = (inflight = new AbortController())
   const images: ImageInput[] = []
@@ -66,7 +66,7 @@ async function ask(text: string, withScreenshot: boolean, profileId?: string) {
     return send('claude:error', e instanceof Error ? e.message : String(e))
   }
   const profile = settings.profiles.find((p) => p.id === (profileId ?? settings.profileId)) ?? settings.profiles[0]
-  send('claude:start', { text, withScreenshot, label: profileId ? profile.name : undefined })
+  send('claude:start', { text: display ?? text, withScreenshot, label: profileId ? profile.name : undefined })
   await provider.ask(
     { text, images, model: settings.model, systemPrompt: profile.systemPrompt },
     {
@@ -100,6 +100,10 @@ function registerShortcuts() {
       win.showInactive()
       send('ui:suggest')
     },
+    'CommandOrControl+Shift+T': () => {
+      win.showInactive()
+      send('ui:send-transcript')
+    },
     'CommandOrControl+Shift+R': () => {
       inflight?.abort()
       provider.reset()
@@ -116,7 +120,9 @@ function registerShortcuts() {
 }
 
 function registerIpc() {
-  ipcMain.handle('claude:ask', (_e, text: string, withScreenshot: boolean, profileId?: string) => ask(text, withScreenshot, profileId))
+  ipcMain.handle('claude:ask', (_e, text: string, withScreenshot: boolean, profileId?: string, display?: string) =>
+    ask(text, withScreenshot, profileId, display)
+  )
   ipcMain.handle('audio:ask-mic', () => askMicrophoneAccess())
   ipcMain.handle('claude:cancel', () => inflight?.abort())
   ipcMain.handle('claude:reset', () => {

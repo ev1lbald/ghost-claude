@@ -54,7 +54,8 @@ export function App() {
       ),
       g.onReset(() => setTurns([])),
       g.onFocusInput(() => inputRef.current?.focus()),
-      g.onSuggest(() => suggestRef.current())
+      g.onSuggest(() => suggestRef.current()),
+      g.onSendTranscript(() => sendTranscriptRef.current())
     ]
     return () => offs.forEach((off) => off())
   }, [])
@@ -73,6 +74,21 @@ export function App() {
   }
   const suggestRef = useRef(suggest)
   suggestRef.current = suggest
+
+  // Sends only what was said since the previous send, so repeated presses
+  // don't re-ask about old phrases.
+  const lastSentId = useRef(0)
+  const sendTranscript = () => {
+    const fresh = linesRef.current.filter((l) => l.id > lastSentId.current && !l.pending && l.text)
+    if (!fresh.length) return setAudioStatus('Нет новых фраз для отправки')
+    lastSentId.current = fresh[fresh.length - 1].id
+    const transcript = fresh.map((l) => `${l.speaker === 'them' ? 'Собеседник' : 'Я'}: ${l.text}`).join('\n')
+    setTab('chat')
+    setShowSettings(false)
+    g.ask(`Фрагмент расшифровки созвона:\n\n${transcript}\n\nОтветь на вопрос или задачу из этого фрагмента.`, false, undefined, `🎧 ${fresh.map((l) => l.text).join(' ')}`)
+  }
+  const sendTranscriptRef = useRef(sendTranscript)
+  sendTranscriptRef.current = sendTranscript
 
   const toggleListening = async () => {
     const l = listener.current!
@@ -149,13 +165,14 @@ export function App() {
           listening={listening}
           onToggle={toggleListening}
           onSuggest={suggest}
+          onSendTranscript={sendTranscript}
           onClear={() => setLines([])}
         />
       ) : (
         <main>
           {turns.length === 0 && (
             <div className="hint">
-              <b>⌘⇧↩</b> скриншот + ответ · <b>⌘⇧I</b> вопрос · <b>⌘⇧Space</b> показать/скрыть · <b>⌘⇧A</b> что ответить на созвоне · <b>⌘⇧R</b> сброс · <b>⌘⇧стрелки</b> двигать
+              <b>⌘⇧↩</b> скриншот + ответ · <b>⌘⇧I</b> вопрос · <b>⌘⇧Space</b> показать/скрыть · <b>⌘⇧T</b> расшифровку в чат · <b>⌘⇧A</b> что ответить на созвоне · <b>⌘⇧R</b> сброс · <b>⌘⇧стрелки</b> двигать
               {status && !status.ok && <div className="error">{status.detail}</div>}
             </div>
           )}

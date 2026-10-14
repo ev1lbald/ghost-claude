@@ -7,6 +7,7 @@ export function CallView({
   listening,
   onToggle,
   onSuggest,
+  onSendTranscript,
   onClear
 }: {
   lines: Line[]
@@ -14,6 +15,7 @@ export function CallView({
   listening: boolean
   onToggle: () => void
   onSuggest: () => void
+  onSendTranscript: () => void
   onClear: () => void
 }) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -31,6 +33,9 @@ export function CallView({
         <button onClick={onSuggest} disabled={!visible.length} title="⌘⇧A">
           💬 Что ответить
         </button>
+        <button onClick={onSendTranscript} disabled={!visible.length} title="Отправить новые фразы в чат как вопрос (⌘⇧T)">
+          ↗ В чат
+        </button>
         <button onClick={onClear} title="Очистить расшифровку">
           ⌫
         </button>
@@ -38,8 +43,8 @@ export function CallView({
       </div>
       {visible.length === 0 && (
         <div className="hint">
-          Нажмите «Слушать»: звук созвона расшифровывается прямо на Mac, никуда не отправляясь. Затем <b>⌘⇧A</b> или «Что ответить», и Claude
-          подскажет ответ на последний вопрос.
+          Нажмите «Слушать»: звук созвона расшифровывается прямо на Mac, никуда не отправляясь. Затем <b>⌘⇧T</b> («В чат»), чтобы Claude ответил на вопрос из расшифровки, или <b>⌘⇧A</b>
+          («Что ответить»), чтобы он подсказал, что сказать собеседнику.
           <br />
           Первый запуск скачивает модель Whisper (~300 МБ, один раз).
         </div>
