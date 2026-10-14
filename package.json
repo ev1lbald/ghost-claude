@@ -4,6 +4,7 @@
   "description": "Невидимый оверлей-ассистент для macOS на вашей подписке Claude",
   "main": "out/main/index.js",
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc",
