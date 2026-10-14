@@ -1,6 +1,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { askMicrophoneAccess, enableLoopbackFlags, installAudioHandlers } from './audio'
 import { captureScreen } from './capture'
 import { ApiKeyProvider } from './providers/apikey'
 import { SubscriptionProvider } from './providers/subscription'
@@ -8,6 +9,8 @@ import type { ClaudeProvider, ImageInput } from './providers/types'
 import { getApiKey, loadSettings, publicSettings, saveSettings, setApiKey, type Settings } from './settings'
 
 const here = dirname(fileURLToPath(import.meta.url))
+
+enableLoopbackFlags()
 
 let win: BrowserWindow
 let settings: Settings
@@ -53,7 +56,7 @@ function send(channel: string, payload?: unknown) {
   if (!win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
-async function ask(text: string, withScreenshot: boolean) {
+async function ask(text: string, withScreenshot: boolean, profileId?: string) {
   inflight?.abort()
   const ctrl = (inflight = new AbortController())
   const images: ImageInput[] = []
@@ -62,8 +65,8 @@ async function ask(text: string, withScreenshot: boolean) {
   } catch (e) {
     return send('claude:error', e instanceof Error ? e.message : String(e))
   }
-  const profile = settings.profiles.find((p) => p.id === settings.profileId) ?? settings.profiles[0]
-  send('claude:start', { text, withScreenshot })
+  const profile = settings.profiles.find((p) => p.id === (profileId ?? settings.profileId)) ?? settings.profiles[0]
+  send('claude:start', { text, withScreenshot, label: profileId ? profile.name : undefined })
   await provider.ask(
     { text, images, model: settings.model, systemPrompt: profile.systemPrompt },
     {
@@ -93,6 +96,10 @@ function registerShortcuts() {
       win.focus()
       send('ui:focus-input')
     },
+    'CommandOrControl+Shift+A': () => {
+      win.showInactive()
+      send('ui:suggest')
+    },
     'CommandOrControl+Shift+R': () => {
       inflight?.abort()
       provider.reset()
@@ -109,7 +116,8 @@ function registerShortcuts() {
 }
 
 function registerIpc() {
-  ipcMain.handle('claude:ask', (_e, text: string, withScreenshot: boolean) => ask(text, withScreenshot))
+  ipcMain.handle('claude:ask', (_e, text: string, withScreenshot: boolean, profileId?: string) => ask(text, withScreenshot, profileId))
+  ipcMain.handle('audio:ask-mic', () => askMicrophoneAccess())
   ipcMain.handle('claude:cancel', () => inflight?.abort())
   ipcMain.handle('claude:reset', () => {
     inflight?.abort()
@@ -134,6 +142,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock?.hide()
   settings = loadSettings()
   provider = makeProvider()
+  installAudioHandlers()
   createWindow()
   registerIpc()
   registerShortcuts()

@@ -1,14 +1,16 @@
 import type { publicSettings } from '../../main/settings'
 import { useEffect, useRef, useState } from 'react'
 import { Answer } from './Answer'
+import { Listener, type Line } from './audio/listener'
+import { CallView, transcriptForPrompt } from './CallView'
 
-type Turn = { q: string; screenshot: boolean; a: string; error?: string; meta?: string; done: boolean }
+type Turn = { q: string; label?: string; screenshot: boolean; a: string; error?: string; meta?: string; done: boolean }
 type PublicSettings = ReturnType<typeof publicSettings>
 
 const MODELS = [
-  { id: 'claude-haiku-5-5', name: 'Haiku (быстро)' },
+  { id: 'claude-haiku-5-5', name: 'Haiku' },
   { id: 'claude-sonnet-5-5', name: 'Sonnet' },
-  { id: 'claude-opus-5-5', name: 'Opus (дорого)' }
+  { id: 'claude-opus-5-5', name: 'Opus' }
 ]
 
 export function App() {
@@ -18,6 +20,17 @@ export function App() {
   const [settings, setSettings] = useState<PublicSettings>()
   const [status, setStatus] = useState<{ ok: boolean; detail: string }>()
   const [showSettings, setShowSettings] = useState(false)
+  const [tab, setTab] = useState<'chat' | 'call'>('chat')
+  const [lines, setLines] = useState<Line[]>([])
+  const [audioStatus, setAudioStatus] = useState('')
+  const [listening, setListening] = useState(false)
+  const linesRef = useRef<Line[]>([])
+  linesRef.current = lines
+  const listener = useRef<Listener | null>(null)
+  listener.current ??= new Listener({
+    onLine: (line) => setLines((ls) => (ls.some((l) => l.id === line.id) ? ls.map((l) => (l.id === line.id ? line : l)) : [...ls, line])),
+    onStatus: setAudioStatus
+  })
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -27,7 +40,7 @@ export function App() {
     g.getSettings().then(setSettings)
     g.status().then(setStatus)
     const offs = [
-      g.onStart(({ text, withScreenshot }) => setTurns((ts) => [...ts, { q: text, screenshot: withScreenshot, a: '', done: false }])),
+      g.onStart(({ text, withScreenshot, label }) => setTurns((ts) => [...ts, { q: text, label, screenshot: withScreenshot, a: '', done: false }])),
       g.onDelta((t: string) => patchLast((x) => ({ ...x, a: x.a + t }))),
       g.onDone((info) =>
         patchLast((x) => ({ ...x, done: true, meta: `${info.ttftMs ? `первый токен ${info.ttftMs} мс · ` : ''}${(info.totalMs / 1000).toFixed(1)} с` }))
@@ -40,7 +53,8 @@ export function App() {
         })
       ),
       g.onReset(() => setTurns([])),
-      g.onFocusInput(() => inputRef.current?.focus())
+      g.onFocusInput(() => inputRef.current?.focus()),
+      g.onSuggest(() => suggestRef.current())
     ]
     return () => offs.forEach((off) => off())
   }, [])
@@ -49,6 +63,32 @@ export function App() {
     // Braces matter: newer Chromium returns a Promise here, which React would treat as a cleanup.
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [turns])
+
+  const suggest = () => {
+    const transcript = transcriptForPrompt(linesRef.current)
+    if (!transcript) return setAudioStatus('Пока нечего отвечать: расшифровка пустая')
+    setTab('chat')
+    setShowSettings(false)
+    g.ask(`Расшифровка созвона за последние минуты:\n\n${transcript}\n\nЧто мне ответить на последний вопрос или реплику собеседника?`, false, 'meeting')
+  }
+  const suggestRef = useRef(suggest)
+  suggestRef.current = suggest
+
+  const toggleListening = async () => {
+    const l = listener.current!
+    if (l.listening) {
+      l.stop()
+      return setListening(false)
+    }
+    try {
+      setListening(true)
+      await l.start({ model: settings!.whisperModel, language: settings!.language, mic: settings!.micEnabled, system: true })
+    } catch (e) {
+      l.stop()
+      setListening(false)
+      setAudioStatus(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const busy = turns.length > 0 && !turns[turns.length - 1].done
   const submit = (withScreenshot: boolean) => {
@@ -66,6 +106,14 @@ export function App() {
     <div className="shell" style={{ ['--alpha' as string]: settings.opacity }}>
       <header className="drag">
         <span className={`dot ${status?.ok ? 'ok' : 'bad'}`} title={status?.detail ?? 'Проверяю…'} />
+        <div className="tabs nodrag">
+          <button className={tab === 'chat' ? 'on' : ''} onClick={() => (setTab('chat'), setShowSettings(false))}>
+            Чат
+          </button>
+          <button className={tab === 'call' ? 'on' : ''} onClick={() => (setTab('call'), setShowSettings(false))}>
+            {listening ? '🔴 ' : ''}Созвон
+          </button>
+        </div>
         <select className="nodrag" value={settings.profileId} onChange={(e) => update({ profileId: e.target.value })}>
           {settings.profiles.map((p) => (
             <option key={p.id} value={p.id}>
@@ -94,11 +142,20 @@ export function App() {
 
       {showSettings ? (
         <Settings settings={settings} status={status} update={update} />
+      ) : tab === 'call' ? (
+        <CallView
+          lines={lines}
+          status={audioStatus}
+          listening={listening}
+          onToggle={toggleListening}
+          onSuggest={suggest}
+          onClear={() => setLines([])}
+        />
       ) : (
         <main>
           {turns.length === 0 && (
             <div className="hint">
-              <b>⌘⇧↩</b> скриншот + ответ · <b>⌘⇧I</b> вопрос · <b>⌘⇧Space</b> показать/скрыть · <b>⌘⇧R</b> сброс · <b>⌘⇧стрелки</b> двигать
+              <b>⌘⇧↩</b> скриншот + ответ · <b>⌘⇧I</b> вопрос · <b>⌘⇧Space</b> показать/скрыть · <b>⌘⇧A</b> что ответить на созвоне · <b>⌘⇧R</b> сброс · <b>⌘⇧стрелки</b> двигать
               {status && !status.ok && <div className="error">{status.detail}</div>}
             </div>
           )}
@@ -107,7 +164,7 @@ export function App() {
               {(t.q || t.screenshot) && (
                 <div className="q">
                   {t.screenshot && '📷 '}
-                  {t.q || 'скриншот'}
+                  {t.label ? `🎧 Подсказка по созвону` : t.q || 'скриншот'}
                 </div>
               )}
               <Answer text={t.a} />
@@ -189,6 +246,27 @@ function Settings({
         Размер скриншота (длинная сторона, px): {settings.screenshotMaxSide}
         <input type="range" min={640} max={1920} step={64} value={settings.screenshotMaxSide} onChange={(e) => update({ screenshotMaxSide: Number(e.target.value) })} />
       </label>
+      <label>
+        Модель расшифровки
+        <select value={settings.whisperModel} onChange={(e) => update({ whisperModel: e.target.value })}>
+          <option value="onnx-community/whisper-base">Whisper base (быстро, ~80 МБ)</option>
+          <option value="onnx-community/whisper-small">Whisper small (рекомендую, ~300 МБ)</option>
+          <option value="onnx-community/whisper-large-v3-turbo">Whisper large-v3-turbo (точнее, ~800 МБ)</option>
+        </select>
+      </label>
+      <label>
+        Язык созвона
+        <select value={settings.language} onChange={(e) => update({ language: e.target.value })}>
+          <option value="russian">Русский</option>
+          <option value="english">English</option>
+          <option value="auto">Определять автоматически</option>
+        </select>
+      </label>
+      <label className="row">
+        <input type="checkbox" checked={settings.micEnabled} onChange={(e) => update({ micEnabled: e.target.checked })} />
+        Расшифровывать и мой микрофон (лучше в наушниках)
+      </label>
+      <div className="meta">Смена модели расшифровки применится после перезапуска.</div>
       <div className="meta">На Pro лимиты небольшие: меньше скриншот и Haiku/Sonnet расходуют их медленнее.</div>
     </main>
   )

@@ -45,3 +45,14 @@ footer { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid rgba(
 textarea { flex: 1; resize: none; height: 54px; }
 .settings label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .settings label.row { flex-direction: row; align-items: center; gap: 8px; }
+.tabs { display: flex; gap: 2px; background: rgba(255,255,255,.04); border-radius: 8px; padding: 2px; }
+.tabs button { border: none; background: transparent; padding: 3px 8px; }
+.tabs button.on { background: rgba(255,255,255,.14); }
+.call-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.call-bar .rec { background: rgba(255, 90, 80, .35); }
+.call-bar button:disabled { opacity: .4; cursor: default; }
+.line { margin-bottom: 6px; display: flex; gap: 8px; }
+.line .who { flex: none; width: 82px; color: var(--muted); font-size: 11px; padding-top: 2px; }
+.line.them .who { color: var(--accent); }
+header select { max-width: 92px; }
+header { overflow: hidden; }

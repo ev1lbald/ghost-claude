@@ -14,6 +14,12 @@ export type Settings = {
   /** Long edge of screenshots in px. Smaller is cheaper on Pro limits. */
   screenshotMaxSide: number
   claudePath: string
+  /** Hugging Face id of the Whisper model used for local transcription. */
+  whisperModel: string
+  /** Whisper language code, or 'auto'. */
+  language: string
+  /** Also transcribe your own microphone, not just the other side. */
+  micEnabled: boolean
   /** API key encrypted with the macOS keychain via safeStorage. */
   apiKeyEncrypted?: string
 }
@@ -52,7 +58,10 @@ const DEFAULTS: Settings = {
   hideFromCapture: false,
   opacity: 0.92,
   screenshotMaxSide: 1280,
-  claudePath: ''
+  claudePath: '',
+  whisperModel: 'onnx-community/whisper-small',
+  language: 'russian',
+  micEnabled: false
 }
 
 const file = () => join(app.getPath('userData'), 'settings.json')

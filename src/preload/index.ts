@@ -7,7 +7,8 @@ const on = (channel: string) => (fn: (payload: any) => void) => {
 }
 
 const api = {
-  ask: (text: string, withScreenshot: boolean) => ipcRenderer.invoke('claude:ask', text, withScreenshot),
+  ask: (text: string, withScreenshot: boolean, profileId?: string) => ipcRenderer.invoke('claude:ask', text, withScreenshot, profileId),
+  askMic: () => ipcRenderer.invoke('audio:ask-mic'),
   cancel: () => ipcRenderer.invoke('claude:cancel'),
   reset: () => ipcRenderer.invoke('claude:reset'),
   status: () => ipcRenderer.invoke('claude:status'),
@@ -19,7 +20,8 @@ const api = {
   onDone: on('claude:done'),
   onError: on('claude:error'),
   onReset: on('ui:reset'),
-  onFocusInput: on('ui:focus-input')
+  onFocusInput: on('ui:focus-input'),
+  onSuggest: on('ui:suggest')
 }
 
 contextBridge.exposeInMainWorld('ghost', api)
