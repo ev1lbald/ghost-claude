@@ -14,6 +14,14 @@ export type Settings = {
   /** Long edge of screenshots in px. Smaller is cheaper on Pro limits. */
   screenshotMaxSide: number
   claudePath: string
+  /** Which local speech recognizer to use. */
+  asrEngine: 'qwen' | 'whisper'
+  /** Hugging Face id of the Qwen3-ASR model (run via asr/server.py). */
+  qwenModel: string
+  /** Words and names that help Qwen3-ASR spell domain terms right. */
+  asrContext: string
+  /** Python with mlx-qwen3-asr installed; empty means asr/.venv. */
+  pythonPath: string
   /** Hugging Face id of the Whisper model used for local transcription. */
   whisperModel: string
   /** Whisper language code, or 'auto'. */
@@ -59,6 +67,10 @@ const DEFAULTS: Settings = {
   opacity: 0.92,
   screenshotMaxSide: 1280,
   claudePath: '',
+  asrEngine: 'qwen',
+  qwenModel: 'Qwen/Qwen3-ASR-1.7B',
+  asrContext: '',
+  pythonPath: '',
   whisperModel: 'onnx-community/whisper-small',
   language: 'russian',
   micEnabled: false

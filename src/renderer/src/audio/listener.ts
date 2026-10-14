@@ -50,9 +50,28 @@ export class Listener {
     return this.ready
   }
 
-  async start(opts: { model: string; language: string; mic: boolean; system: boolean }) {
+  async start(opts: { engine: 'qwen' | 'whisper'; model: string; language: string; mic: boolean; system: boolean }) {
     this.ev.onStatus('Запускаю…')
-    await this.loadModel(opts.model)
+    let transcribe: (id: number, audio: Float32Array) => void
+    if (opts.engine === 'qwen') {
+      const off = window.ghost.onAsrStatus(this.ev.onStatus)
+      try {
+        await window.ghost.asrStart(opts.model)
+      } finally {
+        off()
+      }
+      transcribe = (id, audio) =>
+        window.ghost
+          .asrTranscribe(audio, opts.language)
+          .then((text) => this.resolve(id, cleanTranscript(text)))
+          .catch((e) => {
+            this.resolve(id, '')
+            this.ev.onStatus(`Ошибка Qwen3-ASR: ${e instanceof Error ? e.message : e}`)
+          })
+    } else {
+      await this.loadModel(opts.model)
+      transcribe = (id, audio) => this.worker!.postMessage({ type: 'run', id, audio, language: opts.language }, [audio.buffer])
+    }
 
     const add = (stream: MediaStream, speaker: Speaker) => {
       this.streams.push(stream)
@@ -61,7 +80,7 @@ export class Listener {
           const line: Line = { id: this.nextId++, speaker, text: '…', at: Date.now(), pending: true }
           this.pending.set(line.id, line)
           this.ev.onLine(line)
-          this.worker!.postMessage({ type: 'run', id: line.id, audio, language: opts.language }, [audio.buffer])
+          transcribe(line.id, audio)
         })
       )
     }
@@ -79,6 +98,12 @@ export class Listener {
     this.ev.onStatus('Слушаю')
   }
 
+  private resolve(id: number, text: string) {
+    const line = this.pending.get(id)
+    this.pending.delete(id)
+    if (line) this.ev.onLine({ ...line, text, pending: false })
+  }
+
   stop() {
     this.segmenters.forEach((s) => s.stop())
     this.streams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
@@ -90,4 +115,12 @@ export class Listener {
   get listening() {
     return this.streams.length > 0
   }
+}
+
+// Speech models like to "hear" these in silence, especially in Russian.
+const HALLUCINATIONS = [/субтитр/i, /продолжение следует/i, /спасибо за просмотр/i, /подписывайтесь/i, /^\s*[.…!?\s]*$/, /thank you for watching/i]
+
+function cleanTranscript(text: string): string {
+  const t = text.trim()
+  return HALLUCINATIONS.some((re) => re.test(t)) ? '' : t
 }

@@ -98,7 +98,13 @@ export function App() {
     }
     try {
       setListening(true)
-      await l.start({ model: settings!.whisperModel, language: settings!.language, mic: settings!.micEnabled, system: true })
+      await l.start({
+        engine: settings!.asrEngine,
+        model: settings!.asrEngine === 'qwen' ? settings!.qwenModel : settings!.whisperModel,
+        language: settings!.language,
+        mic: settings!.micEnabled,
+        system: true
+      })
     } catch (e) {
       l.stop()
       setListening(false)
@@ -264,13 +270,36 @@ function Settings({
         <input type="range" min={640} max={1920} step={64} value={settings.screenshotMaxSide} onChange={(e) => update({ screenshotMaxSide: Number(e.target.value) })} />
       </label>
       <label>
-        Модель расшифровки
-        <select value={settings.whisperModel} onChange={(e) => update({ whisperModel: e.target.value })}>
-          <option value="onnx-community/whisper-base">Whisper base (быстро, ~80 МБ)</option>
-          <option value="onnx-community/whisper-small">Whisper small (рекомендую, ~300 МБ)</option>
-          <option value="onnx-community/whisper-large-v3-turbo">Whisper large-v3-turbo (точнее, ~800 МБ)</option>
+        Движок расшифровки
+        <select value={settings.asrEngine} onChange={(e) => update({ asrEngine: e.target.value })}>
+          <option value="qwen">Qwen3-ASR (MLX, нужен npm run setup:asr)</option>
+          <option value="whisper">Whisper (встроенный)</option>
         </select>
       </label>
+      {settings.asrEngine === 'qwen' ? (
+        <>
+          <label>
+            Модель Qwen3-ASR
+            <select value={settings.qwenModel} onChange={(e) => update({ qwenModel: e.target.value })}>
+              <option value="Qwen/Qwen3-ASR-1.7B">1.7B (точнее, ~3,4 ГБ памяти)</option>
+              <option value="Qwen/Qwen3-ASR-0.6B">0.6B (быстрее, ~1,2 ГБ)</option>
+            </select>
+          </label>
+          <label>
+            Подсказка для распознавания (термины, имена)
+            <input defaultValue={settings.asrContext} onBlur={(e) => update({ asrContext: e.target.value })} placeholder="Kubernetes, PostgreSQL, Сбер, Санёк" />
+          </label>
+        </>
+      ) : (
+        <label>
+          Модель Whisper
+          <select value={settings.whisperModel} onChange={(e) => update({ whisperModel: e.target.value })}>
+            <option value="onnx-community/whisper-base">Whisper base (быстро, ~80 МБ)</option>
+            <option value="onnx-community/whisper-small">Whisper small (~300 МБ)</option>
+            <option value="onnx-community/whisper-large-v3-turbo">Whisper large-v3-turbo (точнее, ~800 МБ)</option>
+          </select>
+        </label>
+      )}
       <label>
         Язык созвона
         <select value={settings.language} onChange={(e) => update({ language: e.target.value })}>

@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { askMicrophoneAccess, enableLoopbackFlags, installAudioHandlers } from './audio'
 import { captureScreen } from './capture'
+import { QwenAsr } from './qwenAsr'
 import { ApiKeyProvider } from './providers/apikey'
 import { SubscriptionProvider } from './providers/subscription'
 import type { ClaudeProvider, ImageInput } from './providers/types'
@@ -16,6 +17,7 @@ let win: BrowserWindow
 let settings: Settings
 let provider: ClaudeProvider
 let inflight: AbortController | undefined
+const qwen = new QwenAsr(() => settings.pythonPath)
 
 function makeProvider(): ClaudeProvider {
   if (settings.mode === 'apiKey') {
@@ -124,6 +126,9 @@ function registerIpc() {
     ask(text, withScreenshot, profileId, display)
   )
   ipcMain.handle('audio:ask-mic', () => askMicrophoneAccess())
+  ipcMain.handle('asr:start', (_e, model: string) => qwen.start(model, (text) => send('asr:status', text)))
+  ipcMain.handle('asr:transcribe', (_e, audio: Float32Array, language: string) => qwen.transcribe(audio, language, settings.asrContext))
+  ipcMain.handle('asr:stop', () => qwen.stop())
   ipcMain.handle('claude:cancel', () => inflight?.abort())
   ipcMain.handle('claude:reset', () => {
     inflight?.abort()
@@ -154,4 +159,7 @@ app.whenReady().then(() => {
   registerShortcuts()
 })
 
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  qwen.stop()
+})
