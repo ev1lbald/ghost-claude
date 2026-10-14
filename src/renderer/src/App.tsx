@@ -45,7 +45,10 @@ export function App() {
     return () => offs.forEach((off) => off())
   }, [])
 
-  useEffect(() => bottomRef.current?.scrollIntoView({ block: 'end' }), [turns])
+  useEffect(() => {
+    // Braces matter: newer Chromium returns a Promise here, which React would treat as a cleanup.
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [turns])
 
   const busy = turns.length > 0 && !turns[turns.length - 1].done
   const submit = (withScreenshot: boolean) => {
