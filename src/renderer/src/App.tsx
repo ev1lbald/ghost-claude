@@ -1,0 +1,192 @@
+import type { publicSettings } from '../../main/settings'
+import { useEffect, useRef, useState } from 'react'
+import { Answer } from './Answer'
+
+type Turn = { q: string; screenshot: boolean; a: string; error?: string; meta?: string; done: boolean }
+type PublicSettings = ReturnType<typeof publicSettings>
+
+const MODELS = [
+  { id: 'claude-haiku-5-5', name: 'Haiku (быстро)' },
+  { id: 'claude-sonnet-5-5', name: 'Sonnet' },
+  { id: 'claude-opus-5-5', name: 'Opus (дорого)' }
+]
+
+export function App() {
+  const g = window.ghost
+  const [turns, setTurns] = useState<Turn[]>([])
+  const [input, setInput] = useState('')
+  const [settings, setSettings] = useState<PublicSettings>()
+  const [status, setStatus] = useState<{ ok: boolean; detail: string }>()
+  const [showSettings, setShowSettings] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  const patchLast = (fn: (t: Turn) => Turn) => setTurns((ts) => (ts.length ? [...ts.slice(0, -1), fn(ts[ts.length - 1])] : ts))
+
+  useEffect(() => {
+    g.getSettings().then(setSettings)
+    g.status().then(setStatus)
+    const offs = [
+      g.onStart(({ text, withScreenshot }) => setTurns((ts) => [...ts, { q: text, screenshot: withScreenshot, a: '', done: false }])),
+      g.onDelta((t: string) => patchLast((x) => ({ ...x, a: x.a + t }))),
+      g.onDone((info) =>
+        patchLast((x) => ({ ...x, done: true, meta: `${info.ttftMs ? `первый токен ${info.ttftMs} мс · ` : ''}${(info.totalMs / 1000).toFixed(1)} с` }))
+      ),
+      g.onError((m: string) =>
+        setTurns((ts) => {
+          const last = ts[ts.length - 1]
+          if (last && !last.done) return [...ts.slice(0, -1), { ...last, error: m, done: true }]
+          return [...ts, { q: '', screenshot: false, a: '', error: m, done: true }]
+        })
+      ),
+      g.onReset(() => setTurns([])),
+      g.onFocusInput(() => inputRef.current?.focus())
+    ]
+    return () => offs.forEach((off) => off())
+  }, [])
+
+  useEffect(() => bottomRef.current?.scrollIntoView({ block: 'end' }), [turns])
+
+  const busy = turns.length > 0 && !turns[turns.length - 1].done
+  const submit = (withScreenshot: boolean) => {
+    if (!input.trim() && !withScreenshot) return
+    g.ask(input.trim(), withScreenshot)
+    setInput('')
+  }
+  const update = async (patch: Record<string, unknown>) => {
+    setSettings(await g.setSettings(patch))
+    if ('mode' in patch || 'apiKey' in patch || 'claudePath' in patch) g.status().then(setStatus)
+  }
+
+  if (!settings) return null
+  return (
+    <div className="shell" style={{ ['--alpha' as string]: settings.opacity }}>
+      <header className="drag">
+        <span className={`dot ${status?.ok ? 'ok' : 'bad'}`} title={status?.detail ?? 'Проверяю…'} />
+        <select className="nodrag" value={settings.profileId} onChange={(e) => update({ profileId: e.target.value })}>
+          {settings.profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select className="nodrag" value={settings.model} onChange={(e) => update({ model: e.target.value })}>
+          {MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        <span className="spacer" />
+        <button className="nodrag" title="Новый разговор (⌘⇧R)" onClick={() => (g.reset(), setTurns([]))}>
+          ⟲
+        </button>
+        <button className="nodrag" title="Настройки" onClick={() => setShowSettings((v) => !v)}>
+          ⚙
+        </button>
+        <button className="nodrag" title="Скрыть (⌘⇧Space)" onClick={() => g.hide()}>
+          ✕
+        </button>
+      </header>
+
+      {showSettings ? (
+        <Settings settings={settings} status={status} update={update} />
+      ) : (
+        <main>
+          {turns.length === 0 && (
+            <div className="hint">
+              <b>⌘⇧↩</b> скриншот + ответ · <b>⌘⇧I</b> вопрос · <b>⌘⇧Space</b> показать/скрыть · <b>⌘⇧R</b> сброс · <b>⌘⇧стрелки</b> двигать
+              {status && !status.ok && <div className="error">{status.detail}</div>}
+            </div>
+          )}
+          {turns.map((t, i) => (
+            <section key={i} className="turn">
+              {(t.q || t.screenshot) && (
+                <div className="q">
+                  {t.screenshot && '📷 '}
+                  {t.q || 'скриншот'}
+                </div>
+              )}
+              <Answer text={t.a} />
+              {t.error && <div className="error">{t.error}</div>}
+              {t.meta && <div className="meta">{t.meta}</div>}
+            </section>
+          ))}
+          <div ref={bottomRef} />
+        </main>
+      )}
+
+      <footer>
+        <textarea
+          ref={inputRef}
+          value={input}
+          placeholder="Спросите что-нибудь… (↩ отправить, ⌘↩ со скриншотом)"
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              submit(e.metaKey)
+            }
+            if (e.key === 'Escape') busy ? g.cancel() : g.hide()
+          }}
+        />
+        {busy ? (
+          <button onClick={() => g.cancel()}>■</button>
+        ) : (
+          <button title="Со скриншотом" onClick={() => submit(true)}>
+            📷
+          </button>
+        )}
+      </footer>
+    </div>
+  )
+}
+
+function Settings({
+  settings,
+  status,
+  update
+}: {
+  settings: PublicSettings
+  status?: { ok: boolean; detail: string }
+  update: (p: Record<string, unknown>) => void
+}) {
+  const [key, setKey] = useState('')
+  return (
+    <main className="settings">
+      <label>
+        Режим
+        <select value={settings.mode} onChange={(e) => update({ mode: e.target.value })}>
+          <option value="subscription">Подписка Claude (через Claude Code)</option>
+          <option value="apiKey">API-ключ</option>
+        </select>
+      </label>
+      <div className={status?.ok ? 'meta' : 'error'}>{status?.detail ?? 'Проверяю…'}</div>
+      {settings.mode === 'subscription' ? (
+        <label>
+          Путь к claude (пусто — встроенный)
+          <input defaultValue={settings.claudePath} onBlur={(e) => update({ claudePath: e.target.value })} placeholder="/opt/homebrew/bin/claude" />
+        </label>
+      ) : (
+        <label>
+          API-ключ {settings.hasApiKey && '(сохранён в связке ключей)'}
+          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-ant-…" />
+          <button onClick={() => (update({ apiKey: key }), setKey(''))}>Сохранить</button>
+        </label>
+      )}
+      <label className="row">
+        <input type="checkbox" checked={settings.hideFromCapture} onChange={(e) => update({ hideFromCapture: e.target.checked })} />
+        Скрывать окно от записи экрана и демонстрации
+      </label>
+      <label>
+        Прозрачность фона: {Math.round(settings.opacity * 100)}%
+        <input type="range" min={0.3} max={1} step={0.05} value={settings.opacity} onChange={(e) => update({ opacity: Number(e.target.value) })} />
+      </label>
+      <label>
+        Размер скриншота (длинная сторона, px): {settings.screenshotMaxSide}
+        <input type="range" min={640} max={1920} step={64} value={settings.screenshotMaxSide} onChange={(e) => update({ screenshotMaxSide: Number(e.target.value) })} />
+      </label>
+      <div className="meta">На Pro лимиты небольшие: меньше скриншот и Haiku/Sonnet расходуют их медленнее.</div>
+    </main>
+  )
+}

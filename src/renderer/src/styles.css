@@ -1,0 +1,47 @@
+:root {
+  --alpha: 0.92;
+  --fg: #f2f2f4;
+  --muted: #a0a0aa;
+  --accent: #d97757;
+  --err: #ff8a80;
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  color: var(--fg);
+}
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(22, 22, 26, var(--alpha));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
+}
+header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.drag { -webkit-app-region: drag; }
+.nodrag, select, button, input, textarea { -webkit-app-region: no-drag; }
+.spacer { flex: 1; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: #6fcf97; }
+.dot.bad { background: var(--err); }
+select, input, textarea, button {
+  font: inherit; color: var(--fg); background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 7px; padding: 4px 8px;
+}
+button { cursor: pointer; }
+button:hover { background: rgba(255,255,255,.12); }
+main { flex: 1; overflow-y: auto; padding: 10px 12px; }
+.hint { color: var(--muted); line-height: 1.8; }
+.turn { margin-bottom: 14px; }
+.q { color: var(--accent); margin-bottom: 4px; white-space: pre-wrap; }
+.answer p { margin: 0 0 6px; white-space: pre-wrap; }
+pre { background: rgba(0,0,0,.35); border-radius: 8px; padding: 8px 10px; overflow-x: auto; cursor: copy; }
+code { font: 12px/1.45 ui-monospace, 'SF Mono', Menlo, monospace; }
+.meta { color: var(--muted); font-size: 11px; }
+.error { color: var(--err); margin-top: 6px; }
+footer { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid rgba(255,255,255,.06); }
+textarea { flex: 1; resize: none; height: 54px; }
+.settings label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.settings label.row { flex-direction: row; align-items: center; gap: 8px; }
